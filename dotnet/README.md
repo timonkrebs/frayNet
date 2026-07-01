@@ -136,7 +136,11 @@ scheduling points around memory accesses:
   Task → model join), and `ValueTask<T>.Result` becomes a model join with
   ValueTask exception semantics. Uncontrolled code keeps the allocation-free
   fast path
-- `Interlocked.*` becomes `ControlledInterlocked`
+- `Interlocked.*` becomes `ControlledInterlocked`; the synchronous surfaces
+  of `SemaphoreSlim` (`Wait`/`Release`/`CurrentCount`) and
+  `ManualResetEventSlim` (`Wait`/`Set`/`Reset`/`IsSet`) become model
+  operations; an `async void` suspension is rejected loudly instead of
+  escaping to the thread pool
 - reads and writes of fields *declared in the rewritten assembly* get
   `MemoryHooks` scheduling points (disable with `--no-memory`), so plain
   `counter++` races are explored without any wrappers
@@ -168,10 +172,17 @@ Profiling API (`ICorProfiler`); that remains an option for attach-time
 instrumentation, but static rewriting covers the testing workflow without
 native code.
 
-Not yet ported: `StampedLock`, `LockSupport.park/unpark`, NIO/selector
-support, timed virtual clock, RMI/MCP/IDE integrations. On the .NET side,
-`async void` and custom awaiters remain uncontrolled (fail-fast), and NuGet
-packaging is still open.
+## Packages
+
+`dotnet pack` produces three packages (CI uploads them as artifacts):
+`FrayNet` (engine + primitives + interception shims), `FrayNet.Rewriter`
+(the `fray-rewrite` dotnet tool), and `FrayNet.Xunit` (`[FrayFact]`).
+
+Intentionally not ported: `StampedLock` and `LockSupport.park/unpark` (JVM
+idioms with no BCL counterpart — .NET code uses reader-writer locks and
+events, which are covered), NIO/selector support, and the RMI/MCP/IDE
+integrations. `async void`, custom awaiters, and `IValueTaskSource`
+backings are rejected loudly under control.
 
 ## Building and testing
 
@@ -180,6 +191,12 @@ cd dotnet
 dotnet test
 ```
 
+Timed operations are deterministic by default (`IgnoreTimedBlock`: timeouts
+fire only when nothing else can run). With `IgnoreTimedBlock = false` and
+`VirtualClock = true`, a virtual clock advances to the earliest deadline
+instead of sleeping, so relative timeout ordering (`Sleep(50)` before
+`Sleep(100)`) is preserved deterministically without wall-clock cost.
+
 With `TrackTimelineCoverage` enabled, the runner counts distinct
 thread-ordering behaviors across iterations (upstream's timeline coverage):
 racing operations are identified by their call sites, and
@@ -187,7 +204,7 @@ racing operations are identified by their call sites, and
 event/pair states the exploration reached — useful for judging whether more
 iterations still find new behavior.
 
-The suite (61 tests, ~3s) checks both directions: seeded explorations *find*
+The suite (66 tests, ~3s) checks both directions: seeded explorations *find*
 known bugs (lost updates, ABBA deadlocks, lost wakeups, `if`-instead-of-
 `while` wait conditions, over-wide semaphores, check-then-act CAS races —
 in wrapper-based and in rewritten plain code) and correct implementations

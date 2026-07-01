@@ -227,6 +227,15 @@ public static class AssemblyRewriter
                 genericArguments.AddRange(genericCall.GenericArguments);
                 break;
 
+            // async void suspensions fail fast under control.
+            case "System.Runtime.CompilerServices.AsyncVoidMethodBuilder"
+                when target.Name is "AwaitUnsafeOnCompleted" or "AwaitOnCompleted" &&
+                     genericCall is { GenericArguments.Count: 2 }:
+                shim = ShimMethod(typeof(Interception.ControlledAsync), target.Name, 2,
+                    m => m.GetParameters()[0].ParameterType.FullName!.Contains("AsyncVoidMethodBuilder"));
+                genericArguments.AddRange(genericCall.GenericArguments);
+                break;
+
             case "System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder`1":
                 if (target.Name is "AwaitUnsafeOnCompleted" or "AwaitOnCompleted" &&
                     genericCall is { GenericArguments.Count: 2 })
@@ -551,12 +560,31 @@ public static class AssemblyRewriter
         Redirect(asyncBuilder.GetMethod("SetException", new[] { typeof(Exception) }), controlledAsync, "SetException", new[] { asyncBuilderRef, typeof(Exception) });
         var taskAwaiter = typeof(System.Runtime.CompilerServices.TaskAwaiter);
         Redirect(taskAwaiter.GetMethod("GetResult", Type.EmptyTypes), controlledAsync, "GetResult", new[] { taskAwaiter.MakeByRefType() });
+        var voidBuilder = typeof(System.Runtime.CompilerServices.AsyncVoidMethodBuilder);
+        Redirect(voidBuilder.GetMethod("SetException", new[] { typeof(Exception) }), controlledAsync, "SetException", new[] { voidBuilder.MakeByRefType(), typeof(Exception) });
         var valueTaskBuilder = typeof(System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder);
         var valueTaskBuilderRef = valueTaskBuilder.MakeByRefType();
         var controlledValueTask = typeof(ControlledValueTask);
         Redirect(valueTaskBuilder.GetProperty("Task")!.GetGetMethod(), controlledValueTask, "GetTask", new[] { valueTaskBuilderRef });
         Redirect(valueTaskBuilder.GetMethod("SetResult", Type.EmptyTypes), controlledValueTask, "SetResult", new[] { valueTaskBuilderRef });
         Redirect(valueTaskBuilder.GetMethod("SetException", new[] { typeof(Exception) }), controlledValueTask, "SetException", new[] { valueTaskBuilderRef, typeof(Exception) });
+
+        // AsyncVoidMethodBuilder awaits fail fast under control (structural).
+        // SemaphoreSlim / ManualResetEventSlim (synchronous surface).
+        var semaphoreSlim = typeof(SemaphoreSlim);
+        var controlledSemaphoreSlim = typeof(ControlledSemaphoreSlim);
+        Redirect(semaphoreSlim.GetMethod("Wait", Type.EmptyTypes), controlledSemaphoreSlim, "Wait", new[] { semaphoreSlim });
+        Redirect(semaphoreSlim.GetMethod("Wait", new[] { typeof(int) }), controlledSemaphoreSlim, "Wait", new[] { semaphoreSlim, typeof(int) });
+        Redirect(semaphoreSlim.GetMethod("Release", Type.EmptyTypes), controlledSemaphoreSlim, "Release", new[] { semaphoreSlim });
+        Redirect(semaphoreSlim.GetMethod("Release", new[] { typeof(int) }), controlledSemaphoreSlim, "Release", new[] { semaphoreSlim, typeof(int) });
+        Redirect(semaphoreSlim.GetProperty("CurrentCount")!.GetGetMethod(), controlledSemaphoreSlim, "CurrentCount", new[] { semaphoreSlim });
+        var resetEvent = typeof(ManualResetEventSlim);
+        var controlledResetEvent = typeof(ControlledManualResetEventSlim);
+        Redirect(resetEvent.GetMethod("Wait", Type.EmptyTypes), controlledResetEvent, "Wait", new[] { resetEvent });
+        Redirect(resetEvent.GetMethod("Wait", new[] { typeof(int) }), controlledResetEvent, "Wait", new[] { resetEvent, typeof(int) });
+        Redirect(resetEvent.GetMethod("Set", Type.EmptyTypes), controlledResetEvent, "Set", new[] { resetEvent });
+        Redirect(resetEvent.GetMethod("Reset", Type.EmptyTypes), controlledResetEvent, "Reset", new[] { resetEvent });
+        Redirect(resetEvent.GetProperty("IsSet")!.GetGetMethod(), controlledResetEvent, "IsSet", new[] { resetEvent });
 
         // TaskCompletionSource (the generic variant goes through the
         // structural generic redirect).

@@ -9,6 +9,7 @@ public enum ResourceType
     Semaphore,
     CountdownLatch,
     ReaderWriterLock,
+    Event,
     Sleep,
 }
 

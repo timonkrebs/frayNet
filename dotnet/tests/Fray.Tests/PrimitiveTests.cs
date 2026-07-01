@@ -163,6 +163,40 @@ public class PrimitiveTests
     }
 
     [Fact]
+    public void VirtualClockOrdersTimeoutsDeterministically()
+    {
+        var start = Environment.TickCount64;
+        var result = FrayTestRunner.Run(() =>
+        {
+            var order = new List<string>();
+            var slow = FrayThread.StartNew(() =>
+            {
+                FrayThread.Sleep(100);
+                order.Add("slow");
+            });
+            var fast = FrayThread.StartNew(() =>
+            {
+                FrayThread.Sleep(50);
+                order.Add("fast");
+            });
+            slow.Join();
+            fast.Join();
+            // The virtual clock advances to the earliest deadline first, so
+            // the shorter sleep always finishes first.
+            Assert.Equal(new[] { "fast", "slow" }, order);
+        }, new FrayConfiguration
+        {
+            Iterations = 30,
+            Seed = 3,
+            IgnoreTimedBlock = false,
+            VirtualClock = true,
+        });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+        Assert.True(Environment.TickCount64 - start < 30_000, "Virtual clock consumed wall time.");
+    }
+
+    [Fact]
     public void SleepDoesNotConsumeWallClockTime()
     {
         var start = Environment.TickCount64;

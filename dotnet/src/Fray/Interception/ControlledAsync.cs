@@ -166,6 +166,55 @@ public static class ControlledAsync
     }
 
     // -----------------------------------------------------------------
+    // AsyncVoidMethodBuilder: async void cannot be controlled (there is no
+    // task to join), so suspending under Fray fails loudly instead of
+    // resuming on an uncontrolled thread-pool thread.
+    // -----------------------------------------------------------------
+
+    public static void AwaitUnsafeOnCompleted<TAwaiter, TStateMachine>(
+        ref AsyncVoidMethodBuilder builder, ref TAwaiter awaiter, ref TStateMachine stateMachine)
+        where TAwaiter : ICriticalNotifyCompletion
+        where TStateMachine : IAsyncStateMachine
+    {
+        if (FrayRuntime.ControlledContext() == null)
+        {
+            builder.AwaitUnsafeOnCompleted(ref awaiter, ref stateMachine);
+            return;
+        }
+        throw AsyncVoidNotSupported();
+    }
+
+    public static void AwaitOnCompleted<TAwaiter, TStateMachine>(
+        ref AsyncVoidMethodBuilder builder, ref TAwaiter awaiter, ref TStateMachine stateMachine)
+        where TAwaiter : INotifyCompletion
+        where TStateMachine : IAsyncStateMachine
+    {
+        if (FrayRuntime.ControlledContext() == null)
+        {
+            builder.AwaitOnCompleted(ref awaiter, ref stateMachine);
+            return;
+        }
+        throw AsyncVoidNotSupported();
+    }
+
+    private static NotSupportedException AsyncVoidNotSupported() => new(
+        "Fray: async void methods cannot be controlled (their continuations have no " +
+        "task to join). Use async Task instead.");
+
+    public static void SetException(ref AsyncVoidMethodBuilder builder, Exception exception)
+    {
+        var runContext = FrayRuntime.ControlledContext();
+        if (runContext == null)
+        {
+            builder.SetException(exception);
+            return;
+        }
+        // The real SetException rethrows on the thread pool and kills the
+        // process; under control the exception is the finding itself.
+        runContext.ReportError(exception);
+    }
+
+    // -----------------------------------------------------------------
     // Suspension: continuation carriers
     // -----------------------------------------------------------------
 

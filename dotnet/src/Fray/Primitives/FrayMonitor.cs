@@ -40,7 +40,7 @@ public static class FrayMonitor
         {
             return Monitor.Wait(obj, millisecondsTimeout);
         }
-        return runContext.ObjectWait(obj, TimeoutToDeadline(millisecondsTimeout), canInterrupt: true);
+        return runContext.ObjectWait(obj, runContext.DeadlineFor(millisecondsTimeout), canInterrupt: true);
     }
 
     public static void Pulse(object obj)
@@ -64,7 +64,4 @@ public static class FrayMonitor
         }
         runContext.ObjectPulse(obj, all: true);
     }
-
-    internal static long TimeoutToDeadline(int millisecondsTimeout) =>
-        millisecondsTimeout < 0 ? BlockedOperation.NotTimed : Environment.TickCount64 + millisecondsTimeout;
 }

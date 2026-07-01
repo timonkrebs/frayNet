@@ -5,6 +5,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>fray-rewrite</ToolCommandName>
+    <PackageId>FrayNet.Rewriter</PackageId>
+    <Description>IL rewriter (dotnet tool) for FrayNet: redirects Monitor/Thread/Interlocked/Task/async machinery in an assembly to the Fray engine so plain .NET code can be tested under controlled concurrency without source changes.</Description>
   </PropertyGroup>
 
   <ItemGroup>

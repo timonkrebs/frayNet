@@ -340,6 +340,45 @@ public class RewriterTests : IClassFixture<RewrittenAssemblyFixture>
     }
 
     [Fact]
+    public void PlainSemaphoreSlimMutexHasNoRace()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.SlimTargets", "SemaphoreSlimMutex"),
+            new FrayConfiguration { Iterations = 100, Seed = 7 });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
+    public void FindsOverParallelismInPlainSemaphoreSlim()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.SlimTargets", "SemaphoreSlimTooWide"),
+            new FrayConfiguration { Iterations = 500, Seed = 41 });
+
+        Assert.NotNull(result.BugFound);
+        Assert.Contains("Two threads inside", result.BugFound!.Message);
+    }
+
+    [Fact]
+    public void PlainResetEventOrdersPublication()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.SlimTargets", "ResetEventPublication"),
+            new FrayConfiguration { Iterations = 150, Seed = 17 });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
+    public void AsyncVoidSuspensionIsRejectedLoudly()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.SlimTargets", "AsyncVoidUsage"),
+            new FrayConfiguration { Iterations = 5, Seed = 1 });
+
+        Assert.NotNull(result.BugFound);
+        Assert.IsType<NotSupportedException>(result.BugFound);
+        Assert.Contains("async void", result.BugFound!.Message);
+    }
+
+    [Fact]
     public void RewrittenLostUpdateReplaysToTheSameBug()
     {
         var reportDirectory = Path.Combine(Path.GetTempPath(), $"fray-report-{Guid.NewGuid():N}");

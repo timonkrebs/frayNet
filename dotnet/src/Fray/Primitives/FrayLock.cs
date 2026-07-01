@@ -53,7 +53,7 @@ public sealed class FrayLock
         {
             return Monitor.TryEnter(_real, millisecondsTimeout);
         }
-        return runContext.LockTryLock(this, canInterrupt: true, FrayMonitor.TimeoutToDeadline(millisecondsTimeout));
+        return runContext.LockTryLock(this, canInterrupt: true, runContext.DeadlineFor(millisecondsTimeout));
     }
 
     public void Unlock()
@@ -105,7 +105,7 @@ public sealed class FrayCondition
             // must tolerate anyway.
             return Monitor.Wait(_lock.RealLock, millisecondsTimeout);
         }
-        return runContext.ConditionAwait(this, _lock, FrayMonitor.TimeoutToDeadline(millisecondsTimeout), canInterrupt: true);
+        return runContext.ConditionAwait(this, _lock, runContext.DeadlineFor(millisecondsTimeout), canInterrupt: true);
     }
 
     public void Signal()

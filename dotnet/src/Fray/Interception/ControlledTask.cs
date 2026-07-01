@@ -173,7 +173,7 @@ public static class ControlledTask
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var entry = new Entry
         {
-            DelayDeadline = Environment.TickCount64 + Math.Max(0, millisecondsDelay),
+            DelayDeadline = runContext.DeadlineFor(Math.Max(0, millisecondsDelay)),
         };
         Entries.Add(completion.Task, entry);
         return completion.Task;
@@ -210,7 +210,7 @@ public static class ControlledTask
             RequireCompleted(task);
             return task.Wait(millisecondsTimeout);
         }
-        return WaitMapped(runContext, task, entry, FrayMonitor.TimeoutToDeadline(millisecondsTimeout));
+        return WaitMapped(runContext, task, entry, runContext.DeadlineFor(millisecondsTimeout));
     }
 
     /// <summary>Waiting on an uncontrolled, unfinished task would stall the whole run.</summary>
@@ -241,7 +241,7 @@ public static class ControlledTask
     {
         if (!entry.Completed)
         {
-            var remaining = entry.DelayDeadline - Environment.TickCount64;
+            var remaining = entry.DelayDeadline - runContext.NowMs;
             if (remaining > 0)
             {
                 runContext.ThreadSleep(remaining);
@@ -453,7 +453,7 @@ public static class ControlledTask
         }
         if (entry.IsDelay)
         {
-            if (!entry.Completed && Environment.TickCount64 >= entry.DelayDeadline)
+            if (!entry.Completed && runContext.NowMs >= entry.DelayDeadline)
             {
                 entry.Completed = true;
             }

@@ -125,7 +125,7 @@ public static class ControlledThread
             ReferenceEquals(entry.RunContext, runContext))
         {
             return ControlledThreadLifecycle.Join(runContext, thread, () => entry.Completed,
-                FrayMonitor.TimeoutToDeadline(millisecondsTimeout));
+                runContext.DeadlineFor(millisecondsTimeout));
         }
         return thread.Join(millisecondsTimeout);
     }

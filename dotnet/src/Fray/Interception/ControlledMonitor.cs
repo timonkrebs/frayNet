@@ -63,7 +63,7 @@ public static class ControlledMonitor
         {
             return Monitor.TryEnter(obj, millisecondsTimeout);
         }
-        return runContext.LockTryLock(obj, canInterrupt: true, FrayMonitor.TimeoutToDeadline(millisecondsTimeout));
+        return runContext.LockTryLock(obj, canInterrupt: true, runContext.DeadlineFor(millisecondsTimeout));
     }
 
     public static bool TryEnter(object obj, TimeSpan timeout) =>
@@ -92,7 +92,7 @@ public static class ControlledMonitor
         {
             return Monitor.Wait(obj, millisecondsTimeout);
         }
-        return runContext.ObjectWait(obj, FrayMonitor.TimeoutToDeadline(millisecondsTimeout), canInterrupt: true);
+        return runContext.ObjectWait(obj, runContext.DeadlineFor(millisecondsTimeout), canInterrupt: true);
     }
 
     public static bool Wait(object obj, TimeSpan timeout) =>

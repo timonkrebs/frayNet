@@ -4,6 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>true</IsPackable>
+    <PackageId>FrayNet</PackageId>
+    <Description>Deterministic concurrency testing for .NET: a controlled scheduler explores thread interleavings (Random/PCT/POS/SURW), finds races, deadlocks and liveness violations, and replays failing schedules exactly. C# port of the Fray framework for the JVM.</Description>
   </PropertyGroup>
 
 </Project>

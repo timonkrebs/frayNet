@@ -56,7 +56,7 @@ public sealed class FrayCountdownEvent
                 return true;
             }
         }
-        return runContext.LatchAwait(this, _initialCount, FrayMonitor.TimeoutToDeadline(millisecondsTimeout));
+        return runContext.LatchAwait(this, _initialCount, runContext.DeadlineFor(millisecondsTimeout));
     }
 
     /// <summary>Decrements the count, releasing waiters when it reaches zero.</summary>

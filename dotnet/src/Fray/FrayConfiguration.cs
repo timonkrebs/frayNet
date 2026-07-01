@@ -54,6 +54,14 @@ public sealed class FrayConfiguration
     /// </summary>
     public bool IgnoreTimedBlock { get; set; } = true;
 
+    /// <summary>
+    /// With <see cref="IgnoreTimedBlock"/> disabled: advance a virtual clock
+    /// to the earliest deadline instead of sleeping, so relative timeout
+    /// ordering (Sleep(50) before Sleep(100)) is preserved deterministically
+    /// without consuming wall-clock time.
+    /// </summary>
+    public bool VirtualClock { get; set; }
+
     /// <summary>Explore spurious wakeups of waits, as permitted by monitor semantics.</summary>
     public bool AllowSpuriousWakeups { get; set; } = true;
 

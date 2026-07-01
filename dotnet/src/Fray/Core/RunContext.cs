@@ -53,6 +53,16 @@ public sealed class RunContext
     internal bool IsWindingDown =>
         BugFound != null || (_mainExiting && Config.AbortThreadsAfterMainExit);
 
+    private long _virtualNowMs;
+
+    private bool UseVirtualClock => Config.VirtualClock && !Config.IgnoreTimedBlock;
+
+    /// <summary>The execution's clock: virtual when configured, else wall time.</summary>
+    internal long NowMs => UseVirtualClock ? _virtualNowMs : Environment.TickCount64;
+
+    internal long DeadlineFor(int millisecondsTimeout) =>
+        millisecondsTimeout < 0 ? BlockedOperation.NotTimed : NowMs + millisecondsTimeout;
+
     public RunContext(FrayConfiguration config, IScheduler scheduler, IRandomness randomness, IReadOnlyList<IScheduleObserver> observers)
     {
         Config = config;
@@ -280,7 +290,7 @@ public sealed class RunContext
         }
         else
         {
-            context.PendingOperation = new SleepBlocked(context, Environment.TickCount64 + milliseconds);
+            context.PendingOperation = new SleepBlocked(context, NowMs + milliseconds);
             context.State = FrayThreadState.Blocked;
             ScheduleNextOperation(true);
         }
@@ -625,6 +635,51 @@ public sealed class RunContext
         GetLatchContext(latch, initialCount).Count;
 
     // ---------------------------------------------------------------------
+    // Manual-reset events
+    // ---------------------------------------------------------------------
+
+    private readonly ConditionalWeakTable<object, ManualResetEventContext> _eventManager = new();
+
+    private ManualResetEventContext GetEventContext(object eventObject, bool initialState) =>
+        _eventManager.GetValue(eventObject, o => new ManualResetEventContext(initialState, o));
+
+    public bool EventWait(object eventObject, bool initialState, long blockedUntil)
+    {
+        var context = CurrentThread();
+        var eventContext = GetEventContext(eventObject, initialState);
+
+        context.PendingOperation = new ObjectWaitOperation(ObjectIds.Of(eventObject));
+        context.State = FrayThreadState.Runnable;
+        ScheduleNextOperation(true);
+
+        var blockingWait = true;
+        while (!eventContext.Wait(blockingWait, canInterrupt: true, context))
+        {
+            context.PendingOperation = new LockBlocked(blockedUntil, eventContext);
+            context.State = FrayThreadState.Blocked;
+            ScheduleNextOperation(true);
+            context.CheckInterrupt();
+            var pendingOperation = context.PendingOperation;
+            VerifyOrReport(pendingOperation is ThreadResumeOperation, "Event wait resumed with unexpected operation.");
+            if (pendingOperation is ThreadResumeOperation { NoTimeout: false } &&
+                blockedUntil != BlockedOperation.NotTimed)
+            {
+                return eventContext.IsSet;
+            }
+        }
+        return true;
+    }
+
+    public void EventSet(object eventObject, bool initialState) =>
+        GetEventContext(eventObject, initialState).Set();
+
+    public void EventReset(object eventObject, bool initialState) =>
+        GetEventContext(eventObject, initialState).Reset();
+
+    public bool EventIsSet(object eventObject, bool initialState) =>
+        GetEventContext(eventObject, initialState).IsSet;
+
+    // ---------------------------------------------------------------------
     // Memory operations
     // ---------------------------------------------------------------------
 
@@ -689,7 +744,7 @@ public sealed class RunContext
         {
             return 0;
         }
-        var currentTime = Environment.TickCount64;
+        var currentTime = NowMs;
         foreach (var thread in _registeredThreads)
         {
             if (thread.PendingOperation is BlockedOperation { IsTimed: true } operation)
@@ -721,8 +776,16 @@ public sealed class RunContext
         }
         if (_enabledBuffer.Count == 0 && blockingTime > 0)
         {
-            // Everything is blocked on timed operations: advance wall time.
-            Thread.Sleep((int)Math.Min(blockingTime, int.MaxValue));
+            // Everything is blocked on timed operations: advance time to the
+            // earliest deadline — virtually when configured, else for real.
+            if (UseVirtualClock)
+            {
+                _virtualNowMs += blockingTime;
+            }
+            else
+            {
+                Thread.Sleep((int)Math.Min(blockingTime, int.MaxValue));
+            }
             UnblockTimedBlocking();
             foreach (var thread in _registeredThreads)
             {
