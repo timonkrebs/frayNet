@@ -77,7 +77,10 @@ public static class FrayTestRunner
     {
         lock (Gate)
         {
-            Core.Operations.RacingOperation.ResolveStackTraceHashes = config.TrackTimelineCoverage;
+            // SURW samples by racing-operation call site, so it needs the
+            // stack hashes just like timeline coverage does.
+            Core.Operations.RacingOperation.ResolveStackTraceHashes =
+                config.TrackTimelineCoverage || config.Scheduler == SchedulerKind.Surw;
             try
             {
                 return RunInternal(body, config);

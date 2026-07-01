@@ -16,6 +16,9 @@ public enum SchedulerKind
 
     /// <summary>Partial Order Sampling (prioritizes racing operations).</summary>
     Pos,
+
+    /// <summary>Selectively Uniform Random Walk (uniform sampling of racing-operation interleavings).</summary>
+    Surw,
 }
 
 /// <summary>
@@ -93,6 +96,7 @@ public sealed class FrayConfiguration
             SchedulerKind.Fifo => new FifoScheduler(),
             SchedulerKind.Pct => new PctScheduler(randomness, numSwitchPoints: 3, maxStep: 0),
             SchedulerKind.Pos => new PosScheduler(randomness),
+            SchedulerKind.Surw => new SurwScheduler(randomness, new Dictionary<int, int>(), new HashSet<int>()),
             _ => throw new ArgumentOutOfRangeException(nameof(Scheduler)),
         };
     }

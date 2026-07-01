@@ -16,6 +16,7 @@ namespace Fray.Core.Scheduling;
 [JsonDerivedType(typeof(FifoScheduler), "fifo")]
 [JsonDerivedType(typeof(PctScheduler), "pct")]
 [JsonDerivedType(typeof(PosScheduler), "pos")]
+[JsonDerivedType(typeof(SurwScheduler), "surw")]
 public interface IScheduler
 {
     /// <param name="threads">Enabled threads, ordered by thread index.</param>

@@ -50,7 +50,7 @@ it deterministically for debugging.
 dotnet/
   src/Fray/
     Core/                 engine: RunContext, ThreadContext, contexts, operations
-    Core/Scheduling/      Random, FIFO, PCT, POS, Replay schedulers
+    Core/Scheduling/      Random, FIFO, PCT, POS, SURW, Replay schedulers
     Core/Observers/       schedule recording, replay verification
     Core/Randomness/      recordable randomness for deterministic replay
     Primitives/           FrayThread, FrayMonitor, FrayLock, FraySemaphore, ...
@@ -70,7 +70,7 @@ dotnet/
 | `ThreadContext` + `Sync`                         | `Fray.Core.ThreadContext` (semaphore handoff) |
 | `concurrency/context/*` (lock/signal/latch/...)  | `Fray.Core.Contexts.*`                    |
 | `concurrency/operations/*`                       | `Fray.Core.Operations.*`                  |
-| `scheduler/*` (Random, FIFO, PCT, POS, Replay)   | `Fray.Core.Scheduling.*`                  |
+| `scheduler/*` (Random, FIFO, PCT, POS, SURW, Replay) | `Fray.Core.Scheduling.*`             |
 | `randomness/ControlledRandom`                    | `Fray.Core.Randomness.ControlledRandom`   |
 | `observers/ScheduleRecorder` / `ScheduleVerifier`| `Fray.Core.Observers.*`                   |
 | `TestRunner` / `Configuration`                   | `FrayTestRunner` / `FrayConfiguration`    |
@@ -161,10 +161,9 @@ instrumentation, but static rewriting covers the testing workflow without
 native code.
 
 Not yet ported: `StampedLock`, `LockSupport.park/unpark`, NIO/selector
-support, the SURW scheduler, timed virtual clock, RMI/MCP/IDE integrations.
-On the .NET side, `async void`/`ValueTask`/`ContinueWith` and custom
-awaiters remain uncontrolled (fail-fast), and a CI workflow for `dotnet
-test` is worth adding.
+support, timed virtual clock, RMI/MCP/IDE integrations. On the .NET side,
+`async void`/`ValueTask` and custom awaiters remain uncontrolled
+(fail-fast), and NuGet packaging is still open.
 
 ## Building and testing
 
@@ -180,7 +179,7 @@ racing operations are identified by their call sites, and
 event/pair states the exploration reached — useful for judging whether more
 iterations still find new behavior.
 
-The suite (55 tests, ~3s) checks both directions: seeded explorations *find*
+The suite (58 tests, ~3s) checks both directions: seeded explorations *find*
 known bugs (lost updates, ABBA deadlocks, lost wakeups, `if`-instead-of-
 `while` wait conditions, over-wide semaphores, check-then-act CAS races —
 in wrapper-based and in rewritten plain code) and correct implementations

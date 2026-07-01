@@ -21,6 +21,7 @@ public class ConcurrencyBugTests
     [InlineData(SchedulerKind.Random)]
     [InlineData(SchedulerKind.Pct)]
     [InlineData(SchedulerKind.Pos)]
+    [InlineData(SchedulerKind.Surw)]
     public void FindsLostUpdateWithoutLock(SchedulerKind scheduler)
     {
         var result = FrayTestRunner.Run(LostUpdateBody, new FrayConfiguration
