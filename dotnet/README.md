@@ -24,6 +24,21 @@ var result = FrayTestRunner.Run(() =>
 result.ThrowIfBugFound(); // fails the test with the schedule that broke it
 ```
 
+Or, with the xUnit integration (`Fray.Xunit`, the counterpart of the JVM
+implementation's `fray-junit`):
+
+```csharp
+[FrayFact(Iterations = 500, Seed = 42, Scheduler = SchedulerKind.Pos)]
+public void CounterHasNoLostUpdate()
+{
+    var counter = new FrayShared<int>(0);
+    // ... create state inside the body: it runs once per explored schedule
+}
+```
+
+A found bug fails the test with `FrayBugFoundException`, carrying the
+engine's report and the failing schedule.
+
 Fray.NET explores a different thread interleaving on every iteration and
 stops at the first one that throws, deadlocks, or violates liveness. The
 result carries the failing schedule; `FrayConfiguration.Replay(path)` re-runs
@@ -42,6 +57,7 @@ dotnet/
     Interception/         shims targeted by the IL rewriter (ControlledMonitor, ...)
     FrayTestRunner.cs     iteration loop, report saving, replay
   src/Fray.Rewriter/      Mono.Cecil IL rewriter + `fray-rewrite` CLI
+  src/Fray.Xunit/         [FrayFact] attribute: xUnit tests run under exploration
   tests/Fray.TargetCode/  plain multithreaded code (no Fray reference) for rewriter tests
   tests/Fray.Tests/       xUnit suite: known bugs found, correct code passes
 ```
@@ -59,7 +75,7 @@ dotnet/
 | `observers/ScheduleRecorder` / `ScheduleVerifier`| `Fray.Core.Observers.*`                   |
 | `TestRunner` / `Configuration`                   | `FrayTestRunner` / `FrayConfiguration`    |
 | `org.pastalab.fray.runtime.Runtime` delegates    | `FrayRuntime` (ambient context + passthrough) |
-| JUnit `@ConcurrencyTest`                         | call `FrayTestRunner.Run` from any test framework |
+| JUnit `@ConcurrencyTest` (fray-junit)            | `[FrayFact]` (Fray.Xunit)                 |
 
 ### Controlled primitives
 
@@ -156,7 +172,7 @@ cd dotnet
 dotnet test
 ```
 
-The suite (47 tests, ~3s) checks both directions: seeded explorations *find*
+The suite (50 tests, ~3s) checks both directions: seeded explorations *find*
 known bugs (lost updates, ABBA deadlocks, lost wakeups, `if`-instead-of-
 `while` wait conditions, over-wide semaphores, check-then-act CAS races —
 in wrapper-based and in rewritten plain code) and correct implementations
