@@ -103,4 +103,27 @@ public static class TaskTargets
         var t = Task.Delay(50);
         t.Wait();
     }
+
+    public static void ContinuationChain()
+    {
+        var t = Task.Run(() => 21);
+        var doubled = t.ContinueWith(antecedent => antecedent.Result * 2);
+        if (doubled.Result != 42)
+        {
+            throw new InvalidOperationException($"Continuation chain got {doubled.Result}, expected 42.");
+        }
+    }
+
+    public static void ContinuationLostUpdate()
+    {
+        var counter = new Counter();
+        var start = Task.Run(() => { });
+        var c1 = start.ContinueWith(_ => counter.Increment());
+        var c2 = start.ContinueWith(_ => counter.Increment());
+        Task.WaitAll(c1, c2);
+        if (counter.Value != 2)
+        {
+            throw new InvalidOperationException($"Lost update: counter is {counter.Value}, expected 2.");
+        }
+    }
 }

@@ -22,18 +22,54 @@ public abstract class NonRacingOperation : Operation { }
 /// </summary>
 public abstract class RacingOperation : Operation
 {
+    /// <summary>
+    /// When set (timeline coverage), racing operations carry a stable hash of
+    /// their originating call site so behaviors can be compared across
+    /// iterations. Mirrors <c>resolveRacingOperationStackTraceHash</c>.
+    /// </summary>
+    internal static volatile bool ResolveStackTraceHashes;
+
     public int Resource { get; }
     public MemoryOpType Type { get; }
+    public int StackTraceHash { get; }
 
     protected RacingOperation(int resource, MemoryOpType type)
     {
         Resource = resource;
         Type = type;
+        StackTraceHash = ResolveStackTraceHashes ? ComputeStackTraceHash() : 0;
     }
 
     public abstract bool IsRacing(Operation op);
 
     public override string ToString() => $"{base.ToString()}@{Resource}:{Type}";
+
+    private static int ComputeStackTraceHash()
+    {
+        var stackTrace = new System.Diagnostics.StackTrace(fNeedFileInfo: false);
+        var engineAssembly = typeof(RacingOperation).Assembly;
+        unchecked
+        {
+            var hash = (int)2166136261;
+            var taken = 0;
+            for (var i = 0; i < stackTrace.FrameCount && taken < 2; i++)
+            {
+                var frame = stackTrace.GetFrame(i);
+                var method = frame?.GetMethod();
+                if (method?.DeclaringType == null || method.DeclaringType.Assembly == engineAssembly)
+                {
+                    continue;
+                }
+                var site = $"{method.DeclaringType.FullName}.{method.Name}:{frame!.GetILOffset()}";
+                foreach (var c in site)
+                {
+                    hash = (hash ^ c) * 16777619;
+                }
+                taken++;
+            }
+            return hash;
+        }
+    }
 }
 
 /// <summary>The thread is executing regular (non-synchronizing) code.</summary>

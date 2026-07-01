@@ -116,9 +116,9 @@ scheduling points around memory accesses:
 - the task-parallel subset of `Task` becomes `ControlledTask`:
   `Task.Run(Action)` / `Task.Run<TResult>(Func<TResult>)` bodies execute on
   controlled carrier threads (user code keeps holding a real `Task`), and
-  `Wait`, `Result`, `WaitAll`, `WhenAll`, `IsCompleted` (a yield point, so
-  spin loops make progress), `Task.Delay`, and `TaskCompletionSource` become
-  model operations
+  `Wait`, `Result`, `WaitAll`, `WhenAll`, `ContinueWith` (single-argument
+  overloads), `IsCompleted` (a yield point, so spin loops make progress),
+  `Task.Delay`, and `TaskCompletionSource` become model operations
 - **`async`/`await` is controlled**: calls into the compiler-generated
   machinery (`AsyncTaskMethodBuilder` / `AsyncTaskMethodBuilder<T>` /
   `TaskAwaiter`) are redirected to `ControlledAsync`. The real builder and
@@ -146,9 +146,10 @@ generic-typed field *stores* are not instrumented; `ldflda`-based access
 (e.g. `ref` arguments) is covered only for the intercepted `Interlocked`
 methods; constructors are not memory-instrumented. `async void`,
 `ValueTask`, custom awaiters, `ConfigureAwait` awaiters without an
-extractable task, and explicit task continuations (`ContinueWith`) stay
-uncontrolled: waiting on (or resuming through) such a task inside a Fray run
-fails fast with `NotSupportedException` instead of stalling the exploration.
+extractable task, and `ContinueWith` overloads taking options/scheduler/
+token stay uncontrolled: waiting on (or resuming through) such a task inside
+a Fray run fails fast with `NotSupportedException` instead of stalling the
+exploration.
 
 ## Engine vs. instrumentation
 
@@ -172,7 +173,14 @@ cd dotnet
 dotnet test
 ```
 
-The suite (50 tests, ~3s) checks both directions: seeded explorations *find*
+With `TrackTimelineCoverage` enabled, the runner counts distinct
+thread-ordering behaviors across iterations (upstream's timeline coverage):
+racing operations are identified by their call sites, and
+`FrayResult.CoveredTimelines` reports how many distinct per-thread
+event/pair states the exploration reached — useful for judging whether more
+iterations still find new behavior.
+
+The suite (55 tests, ~3s) checks both directions: seeded explorations *find*
 known bugs (lost updates, ABBA deadlocks, lost wakeups, `if`-instead-of-
 `while` wait conditions, over-wide semaphores, check-then-act CAS races —
 in wrapper-based and in rewritten plain code) and correct implementations

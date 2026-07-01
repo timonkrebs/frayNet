@@ -202,6 +202,31 @@ public class RewriterTests : IClassFixture<RewrittenAssemblyFixture>
     }
 
     [Fact]
+    public void PlainContinuationChainComputes()
+    {
+        var result = FrayTestRunner.Run(TaskTarget("ContinuationChain"), new FrayConfiguration
+        {
+            Iterations = 100,
+            Seed = 7,
+        });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
+    public void FindsLostUpdateBetweenContinuations()
+    {
+        var result = FrayTestRunner.Run(TaskTarget("ContinuationLostUpdate"), new FrayConfiguration
+        {
+            Iterations = 500,
+            Seed = 42,
+        });
+
+        Assert.NotNull(result.BugFound);
+        Assert.Contains("Lost update", result.BugFound!.Message);
+    }
+
+    [Fact]
     public void FindsLostUpdateAcrossAwait()
     {
         var result = FrayTestRunner.Run(AsyncTarget("AsyncLostUpdate"), new FrayConfiguration

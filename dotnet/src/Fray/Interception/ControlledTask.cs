@@ -324,6 +324,126 @@ public static class ControlledTask
         return completion.Task;
     }
 
+    // -----------------------------------------------------------------
+    // ContinueWith (single-argument overloads; scheduler/options/token
+    // variants are not redirected and fail fast when waited on)
+    // -----------------------------------------------------------------
+
+    public static Task ContinueWith(Task task, Action<Task> continuationAction)
+    {
+        var runContext = FrayRuntime.ControlledContext();
+        if (runContext == null)
+        {
+            return task.ContinueWith(continuationAction);
+        }
+        return ContinuationCore(runContext, task, () => continuationAction(task));
+    }
+
+    public static Task<TResult> ContinueWith<TResult>(Task task, Func<Task, TResult> continuationFunction)
+    {
+        var runContext = FrayRuntime.ControlledContext();
+        if (runContext == null)
+        {
+            return task.ContinueWith(continuationFunction);
+        }
+        return ContinuationCore(runContext, task, () => continuationFunction(task));
+    }
+
+    public static Task ContinueWith<TAntecedent>(Task<TAntecedent> task, Action<Task<TAntecedent>> continuationAction)
+    {
+        var runContext = FrayRuntime.ControlledContext();
+        if (runContext == null)
+        {
+            return task.ContinueWith(continuationAction);
+        }
+        return ContinuationCore(runContext, task, () => continuationAction(task));
+    }
+
+    public static Task<TResult> ContinueWith<TAntecedent, TResult>(Task<TAntecedent> task,
+        Func<Task<TAntecedent>, TResult> continuationFunction)
+    {
+        var runContext = FrayRuntime.ControlledContext();
+        if (runContext == null)
+        {
+            return task.ContinueWith(continuationFunction);
+        }
+        return ContinuationCore(runContext, task, () => continuationFunction(task));
+    }
+
+    private static Task ContinuationCore(RunContext runContext, Task antecedent, Action continuation)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entry = new Entry();
+        Entries.Add(completion.Task, entry);
+        ControlledCarrier.Start(runContext, completion.Task, () =>
+        {
+            // Continuations run whatever the antecedent's outcome was; its
+            // fault stays observable through the antecedent itself.
+            JoinSilently(runContext, antecedent);
+            try
+            {
+                continuation();
+            }
+            catch (TargetTerminateException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                entry.Exception = e;
+            }
+        }, () =>
+        {
+            if (entry.Exception != null)
+            {
+                completion.TrySetException(entry.Exception);
+            }
+            else
+            {
+                completion.TrySetResult();
+            }
+            entry.Completed = true;
+        }, "continuation");
+        return completion.Task;
+    }
+
+    private static Task<TResult> ContinuationCore<TResult>(RunContext runContext, Task antecedent,
+        Func<TResult> continuation)
+    {
+        var completion = new TaskCompletionSource<TResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entry = new Entry();
+        Entries.Add(completion.Task, entry);
+        TResult result = default!;
+        ControlledCarrier.Start(runContext, completion.Task, () =>
+        {
+            JoinSilently(runContext, antecedent);
+            try
+            {
+                result = continuation();
+            }
+            catch (TargetTerminateException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                entry.Exception = e;
+            }
+        }, () =>
+        {
+            if (entry.Exception != null)
+            {
+                completion.TrySetException(entry.Exception);
+            }
+            else
+            {
+                completion.TrySetResult(result);
+            }
+            entry.Completed = true;
+        }, "continuation");
+        return completion.Task;
+    }
+
     public static bool IsCompleted(Task task)
     {
         var runContext = FrayRuntime.ControlledContext();

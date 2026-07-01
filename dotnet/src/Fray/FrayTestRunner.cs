@@ -29,6 +29,10 @@ public sealed class FrayResult
     /// <summary>Set when a replay did not follow the recorded schedule.</summary>
     public string? ReplayDivergence { get; init; }
 
+    /// <summary>Distinct thread-ordering behaviors observed, when
+    /// <see cref="FrayConfiguration.TrackTimelineCoverage"/> is enabled.</summary>
+    public int? CoveredTimelines { get; init; }
+
     /// <summary>Throws when a bug was found, with the engine's report attached.</summary>
     public void ThrowIfBugFound()
     {
@@ -73,7 +77,15 @@ public static class FrayTestRunner
     {
         lock (Gate)
         {
-            return RunInternal(body, config);
+            Core.Operations.RacingOperation.ResolveStackTraceHashes = config.TrackTimelineCoverage;
+            try
+            {
+                return RunInternal(body, config);
+            }
+            finally
+            {
+                Core.Operations.RacingOperation.ResolveStackTraceHashes = false;
+            }
         }
     }
 
@@ -94,6 +106,7 @@ public static class FrayTestRunner
                 : new ControlledRandom();
         }
 
+        var coverage = config.TrackTimelineCoverage ? new ThreadOrderingCoverage() : null;
         IScheduler? scheduler = null;
         var iterations = config.IsReplay ? 1 : config.Iterations;
         Exception? bugFound = null;
@@ -123,6 +136,10 @@ public static class FrayTestRunner
             if (verifier != null)
             {
                 observers.Add(verifier);
+            }
+            if (coverage != null)
+            {
+                observers.Add(coverage);
             }
 
             var context = new RunContext(config, scheduler, randomness, observers);
@@ -210,6 +227,7 @@ public static class FrayTestRunner
             ErrorReport = errorReport,
             FailingSchedule = failingSchedule,
             ReplayDivergence = replayDivergence,
+            CoveredTimelines = coverage?.Coverage,
         };
     }
 

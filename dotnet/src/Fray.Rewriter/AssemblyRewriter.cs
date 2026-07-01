@@ -159,6 +159,34 @@ public static class AssemblyRewriter
                 genericArguments.Add(genericCall.GenericArguments[0]);
                 break;
 
+            // Task.ContinueWith<TResult>(Func<Task, TResult>)
+            case "System.Threading.Tasks.Task"
+                when target.Name == "ContinueWith" &&
+                     genericCall is { GenericArguments.Count: 1 } &&
+                     genericCall.ElementMethod.Parameters.Count == 1:
+                shim = ShimMethod(typeof(Interception.ControlledTask), "ContinueWith", 1,
+                    m => m.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(Func<,>));
+                genericArguments.Add(genericCall.GenericArguments[0]);
+                break;
+
+            // Task<T>.ContinueWith(Action<Task<T>>) and
+            // Task<T>.ContinueWith<TResult>(Func<Task<T>, TResult>)
+            case "System.Threading.Tasks.Task`1"
+                when target.Name == "ContinueWith" && target.Parameters.Count == 1:
+                if (genericCall == null)
+                {
+                    shim = ShimMethod(typeof(Interception.ControlledTask), "ContinueWith", 1,
+                        m => m.GetParameters()[1].ParameterType.GetGenericTypeDefinition() == typeof(Action<>));
+                    genericArguments.Add(genericType!.GenericArguments[0]);
+                }
+                else if (genericCall.GenericArguments.Count == 1)
+                {
+                    shim = ShimMethod(typeof(Interception.ControlledTask), "ContinueWith", 2);
+                    genericArguments.Add(genericType!.GenericArguments[0]);
+                    genericArguments.Add(genericCall.GenericArguments[0]);
+                }
+                break;
+
             case "System.Runtime.CompilerServices.AsyncTaskMethodBuilder"
                 when target.Name is "AwaitUnsafeOnCompleted" or "AwaitOnCompleted" &&
                      genericCall is { GenericArguments.Count: 2 }:
@@ -383,7 +411,30 @@ public static class AssemblyRewriter
         $"{method.DeclaringType.FullName}::{method.Name}({string.Join(",", method.Parameters.Select(p => p.ParameterType.FullName))})";
 
     private static string SignatureKey(System.Reflection.MethodBase method) =>
-        $"{method.DeclaringType!.FullName}::{method.Name}({string.Join(",", method.GetParameters().Select(p => p.ParameterType.FullName))})";
+        $"{method.DeclaringType!.FullName}::{method.Name}({string.Join(",", method.GetParameters().Select(p => CecilStyleName(p.ParameterType)))})";
+
+    /// <summary>
+    /// Renders a reflection type the way Cecil's <c>FullName</c> does —
+    /// notably generic instances as <c>Ns.Type`1&lt;Arg&gt;</c> instead of
+    /// reflection's assembly-qualified <c>Ns.Type`1[[Arg, Assembly, ...]]</c>.
+    /// </summary>
+    private static string CecilStyleName(Type type)
+    {
+        if (type.IsByRef)
+        {
+            return CecilStyleName(type.GetElementType()!) + "&";
+        }
+        if (type.IsArray)
+        {
+            return CecilStyleName(type.GetElementType()!) + "[]";
+        }
+        if (type.IsGenericType)
+        {
+            var arguments = string.Join(",", type.GetGenericArguments().Select(CecilStyleName));
+            return $"{type.GetGenericTypeDefinition().FullName}<{arguments}>";
+        }
+        return type.FullName!;
+    }
 
     private static Dictionary<string, System.Reflection.MethodBase> BuildRedirectMap()
     {
@@ -450,6 +501,7 @@ public static class AssemblyRewriter
         Redirect(task.GetMethod("Delay", new[] { span }), cta, "Delay", new[] { span });
         Redirect(task.GetMethod("WhenAll", new[] { typeof(System.Threading.Tasks.Task[]) }), cta, "WhenAll", new[] { typeof(System.Threading.Tasks.Task[]) });
         Redirect(task.GetMethod("WhenAll", new[] { typeof(IEnumerable<System.Threading.Tasks.Task>) }), cta, "WhenAll", new[] { typeof(IEnumerable<System.Threading.Tasks.Task>) });
+        Redirect(task.GetMethod("ContinueWith", new[] { typeof(Action<System.Threading.Tasks.Task>) }), cta, "ContinueWith", new[] { task, typeof(Action<System.Threading.Tasks.Task>) });
 
         // Async machinery: instance calls on builder/awaiter struct addresses
         // become static shim calls taking them by ref (same stack shape).

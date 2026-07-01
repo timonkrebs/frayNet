@@ -60,6 +60,13 @@ public sealed class FrayConfiguration
     /// <summary>Keep exploring after the first bug instead of stopping.</summary>
     public bool ExploreMode { get; set; }
 
+    /// <summary>
+    /// Count distinct thread-ordering behaviors across iterations (see
+    /// <see cref="FrayResult.CoveredTimelines"/>). Enables call-site hashing
+    /// of racing operations, which adds per-operation stack-walk cost.
+    /// </summary>
+    public bool TrackTimelineCoverage { get; set; }
+
     /// <summary>Directory where failing schedules are saved; null disables reports.</summary>
     public string? ReportDirectory { get; set; }
 
