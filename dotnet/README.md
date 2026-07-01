@@ -128,6 +128,14 @@ scheduling points around memory accesses:
   becomes a controlled carrier thread that model-joins the awaited task and
   resumes the state machine, making every async method a schedulable unit of
   the exploration (`Task.Yield` resumptions included)
+- **`async ValueTask` / `ValueTask<T>` are controlled** via
+  `ControlledValueTask`: under control the value-task builder is forced onto
+  its Task-backed slow path (materialized in place through the `ref`), after
+  which the method participates in the same promise machinery; awaiting a
+  ValueTask unwraps its backing object (completed → resume immediately,
+  Task → model join), and `ValueTask<T>.Result` becomes a model join with
+  ValueTask exception semantics. Uncontrolled code keeps the allocation-free
+  fast path
 - `Interlocked.*` becomes `ControlledInterlocked`
 - reads and writes of fields *declared in the rewritten assembly* get
   `MemoryHooks` scheduling points (disable with `--no-memory`), so plain
@@ -144,12 +152,12 @@ deterministically.
 Known rewriter limitations: accesses to fields of value types (structs) and
 generic-typed field *stores* are not instrumented; `ldflda`-based access
 (e.g. `ref` arguments) is covered only for the intercepted `Interlocked`
-methods; constructors are not memory-instrumented. `async void`,
-`ValueTask`, custom awaiters, `ConfigureAwait` awaiters without an
-extractable task, and `ContinueWith` overloads taking options/scheduler/
-token stay uncontrolled: waiting on (or resuming through) such a task inside
-a Fray run fails fast with `NotSupportedException` instead of stalling the
-exploration.
+methods; constructors are not memory-instrumented. `async void`, custom
+awaiters, `IValueTaskSource`-backed ValueTasks, `ConfigureAwait` awaiters
+without an extractable task, and `ContinueWith` overloads taking options/
+scheduler/token stay uncontrolled: waiting on (or resuming through) such a
+task inside a Fray run fails fast with `NotSupportedException` instead of
+stalling the exploration.
 
 ## Engine vs. instrumentation
 
@@ -162,8 +170,8 @@ native code.
 
 Not yet ported: `StampedLock`, `LockSupport.park/unpark`, NIO/selector
 support, timed virtual clock, RMI/MCP/IDE integrations. On the .NET side,
-`async void`/`ValueTask` and custom awaiters remain uncontrolled
-(fail-fast), and NuGet packaging is still open.
+`async void` and custom awaiters remain uncontrolled (fail-fast), and NuGet
+packaging is still open.
 
 ## Building and testing
 
@@ -179,7 +187,7 @@ racing operations are identified by their call sites, and
 event/pair states the exploration reached — useful for judging whether more
 iterations still find new behavior.
 
-The suite (58 tests, ~3s) checks both directions: seeded explorations *find*
+The suite (61 tests, ~3s) checks both directions: seeded explorations *find*
 known bugs (lost updates, ABBA deadlocks, lost wakeups, `if`-instead-of-
 `while` wait conditions, over-wide semaphores, check-then-act CAS races —
 in wrapper-based and in rewritten plain code) and correct implementations

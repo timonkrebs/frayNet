@@ -300,6 +300,46 @@ public class RewriterTests : IClassFixture<RewrittenAssemblyFixture>
     }
 
     [Fact]
+    public void FindsLostUpdateAcrossValueTaskAwait()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.ValueTaskTargets", "ValueTaskLostUpdate"),
+            new FrayConfiguration
+            {
+                Iterations = 500,
+                Seed = 42,
+            });
+
+        Assert.NotNull(result.BugFound);
+        Assert.Contains("Lost update", result.BugFound!.Message);
+    }
+
+    [Fact]
+    public void ValueTaskCompositionComputesDeterministically()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.ValueTaskTargets", "ValueTaskComposition"),
+            new FrayConfiguration
+            {
+                Iterations = 100,
+                Seed = 7,
+            });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
+    public void ValueTaskChainMixesSuspendedAndCompletedAwaits()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.ValueTaskTargets", "ValueTaskChain"),
+            new FrayConfiguration
+            {
+                Iterations = 100,
+                Seed = 7,
+            });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
     public void RewrittenLostUpdateReplaysToTheSameBug()
     {
         var reportDirectory = Path.Combine(Path.GetTempPath(), $"fray-report-{Guid.NewGuid():N}");

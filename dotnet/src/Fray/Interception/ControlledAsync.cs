@@ -169,12 +169,11 @@ public static class ControlledAsync
     // Suspension: continuation carriers
     // -----------------------------------------------------------------
 
-    private static void Suspend<TAwaiter, TStateMachine>(RunContext runContext, ref TAwaiter awaiter,
+    internal static void Suspend<TAwaiter, TStateMachine>(RunContext runContext, ref TAwaiter awaiter,
         TStateMachine stateMachine)
         where TStateMachine : IAsyncStateMachine
     {
-        var awaited = ExtractAwaitedTask(ref awaiter);
-        var isYield = typeof(TAwaiter) == typeof(YieldAwaitable.YieldAwaiter);
+        var (awaited, immediate) = ResolveAwait(ref awaiter);
         // The state machine is captured by value (structs in release builds):
         // the abandoned original returned right after storing its state, so
         // the copy carries everything needed to resume — the same effect as
@@ -188,7 +187,7 @@ public static class ControlledAsync
                 // observes them through the awaiter's GetResult.
                 ControlledTask.JoinSilently(runContext, awaited);
             }
-            else if (!isYield)
+            else if (!immediate)
             {
                 throw new NotSupportedException(
                     $"Fray: await on an unrecognized awaiter type {typeof(TAwaiter).Name} is not controlled.");
@@ -198,6 +197,56 @@ public static class ControlledAsync
     }
 
     private static readonly ConcurrentDictionary<Type, FieldInfo?> AwaitedTaskFields = new();
+    private static readonly ConcurrentDictionary<Type, FieldInfo?> AwaitedValueTaskFields = new();
+    private static readonly ConcurrentDictionary<Type, FieldInfo?> ValueTaskBackingFields = new();
+
+    /// <summary>
+    /// Resolves what an awaiter is waiting for: a joinable <see cref="Task"/>,
+    /// an already-available result (yield, completed ValueTask), or something
+    /// Fray cannot control.
+    /// </summary>
+    private static (Task? Awaited, bool Immediate) ResolveAwait<TAwaiter>(ref TAwaiter awaiter)
+    {
+        if (typeof(TAwaiter) == typeof(YieldAwaitable.YieldAwaiter))
+        {
+            return (null, true);
+        }
+        var task = ExtractAwaitedTask(ref awaiter);
+        if (task != null)
+        {
+            return (task, false);
+        }
+        // (Configured)ValueTaskAwaiter: unwrap the ValueTask's backing object.
+        var valueTaskField = AwaitedValueTaskFields.GetOrAdd(typeof(TAwaiter), type =>
+            type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+                .FirstOrDefault(f => f.FieldType == typeof(ValueTask) ||
+                                     (f.FieldType.IsGenericType &&
+                                      f.FieldType.GetGenericTypeDefinition() == typeof(ValueTask<>))));
+        if (valueTaskField != null)
+        {
+            object boxedAwaiter = awaiter!;
+            var boxedValueTask = valueTaskField.GetValue(boxedAwaiter)!;
+            var backing = GetValueTaskBacking(boxedValueTask);
+            if (backing == null)
+            {
+                return (null, true); // Result already available.
+            }
+            if (backing is Task backingTask)
+            {
+                return (backingTask, false);
+            }
+            // IValueTaskSource-backed: not controlled.
+        }
+        return (null, false);
+    }
+
+    /// <summary>The <c>_obj</c> of a boxed ValueTask: null, a Task, or an IValueTaskSource.</summary>
+    internal static object? GetValueTaskBacking(object boxedValueTask)
+    {
+        var field = ValueTaskBackingFields.GetOrAdd(boxedValueTask.GetType(), type =>
+            type.GetField("_obj", BindingFlags.Instance | BindingFlags.NonPublic));
+        return field?.GetValue(boxedValueTask);
+    }
 
     /// <summary>Pulls the awaited <see cref="Task"/> out of a (Configured)TaskAwaiter.</summary>
     private static Task? ExtractAwaitedTask<TAwaiter>(ref TAwaiter awaiter)

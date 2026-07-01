@@ -220,6 +220,44 @@ public static class AssemblyRewriter
                 }
                 break;
 
+            case "System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder"
+                when target.Name is "AwaitUnsafeOnCompleted" or "AwaitOnCompleted" &&
+                     genericCall is { GenericArguments.Count: 2 }:
+                shim = ShimMethod(typeof(Interception.ControlledValueTask), target.Name, 2);
+                genericArguments.AddRange(genericCall.GenericArguments);
+                break;
+
+            case "System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder`1":
+                if (target.Name is "AwaitUnsafeOnCompleted" or "AwaitOnCompleted" &&
+                    genericCall is { GenericArguments.Count: 2 })
+                {
+                    shim = ShimMethod(typeof(Interception.ControlledValueTask), target.Name, 3);
+                    genericArguments.Add(genericType!.GenericArguments[0]);
+                    genericArguments.AddRange(genericCall.GenericArguments);
+                }
+                else if (target.Name == "get_Task" && target.Parameters.Count == 0)
+                {
+                    shim = ShimMethod(typeof(Interception.ControlledValueTask), "GetTask", 1);
+                    genericArguments.Add(genericType!.GenericArguments[0]);
+                }
+                else if (target.Name == "SetResult" && target.Parameters.Count == 1)
+                {
+                    shim = ShimMethod(typeof(Interception.ControlledValueTask), "SetResult", 1);
+                    genericArguments.Add(genericType!.GenericArguments[0]);
+                }
+                else if (target.Name == "SetException" && target.Parameters.Count == 1)
+                {
+                    shim = ShimMethod(typeof(Interception.ControlledValueTask), "SetException", 1);
+                    genericArguments.Add(genericType!.GenericArguments[0]);
+                }
+                break;
+
+            case "System.Threading.Tasks.ValueTask`1"
+                when target.Name == "get_Result" && target.Parameters.Count == 0:
+                shim = ShimMethod(typeof(Interception.ControlledValueTask), "Result", 1);
+                genericArguments.Add(genericType!.GenericArguments[0]);
+                break;
+
             case "System.Threading.Tasks.TaskCompletionSource`1":
                 if (target.Name == "get_Task" && target.Parameters.Count == 0)
                 {
@@ -513,6 +551,12 @@ public static class AssemblyRewriter
         Redirect(asyncBuilder.GetMethod("SetException", new[] { typeof(Exception) }), controlledAsync, "SetException", new[] { asyncBuilderRef, typeof(Exception) });
         var taskAwaiter = typeof(System.Runtime.CompilerServices.TaskAwaiter);
         Redirect(taskAwaiter.GetMethod("GetResult", Type.EmptyTypes), controlledAsync, "GetResult", new[] { taskAwaiter.MakeByRefType() });
+        var valueTaskBuilder = typeof(System.Runtime.CompilerServices.AsyncValueTaskMethodBuilder);
+        var valueTaskBuilderRef = valueTaskBuilder.MakeByRefType();
+        var controlledValueTask = typeof(ControlledValueTask);
+        Redirect(valueTaskBuilder.GetProperty("Task")!.GetGetMethod(), controlledValueTask, "GetTask", new[] { valueTaskBuilderRef });
+        Redirect(valueTaskBuilder.GetMethod("SetResult", Type.EmptyTypes), controlledValueTask, "SetResult", new[] { valueTaskBuilderRef });
+        Redirect(valueTaskBuilder.GetMethod("SetException", new[] { typeof(Exception) }), controlledValueTask, "SetException", new[] { valueTaskBuilderRef, typeof(Exception) });
 
         // TaskCompletionSource (the generic variant goes through the
         // structural generic redirect).
