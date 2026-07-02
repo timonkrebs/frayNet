@@ -17,7 +17,7 @@ public static class FrayMonitor
             Monitor.Enter(obj);
             return;
         }
-        runContext.MonitorEnter(obj);
+        runContext.MonitorEnter(obj, canInterrupt: true);
     }
 
     public static void Exit(object obj)

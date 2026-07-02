@@ -1,5 +1,12 @@
 # Fray: General-Purpose Concurrency Testing 
 
+> **This fork hosts Fray.NET, a C# port of Fray for .NET** — the same
+> controlled-concurrency engine (Random/PCT/POS/SURW schedulers, deterministic
+> replay, deadlock detection) with IL rewriting so plain `Thread`/`lock`/
+> `Task`/`async` code can be tested unmodified, plus an xUnit `[FrayFact]`
+> integration. See [`dotnet/`](dotnet/README.md). The JVM implementation below
+> is upstream [cmu-pasta/fray](https://github.com/cmu-pasta/fray).
+
 [![Build](https://github.com/cmu-pasta/fray/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/cmu-pasta/fray/actions/workflows/build-and-test.yml)
 [![Gradle](https://img.shields.io/gradle-plugin-portal/v/org.pastalab.fray.gradle)](https://plugins.gradle.org/plugin/org.pastalab.fray.gradle)
 [![Maven](https://img.shields.io/maven-central/v/org.pastalab.fray.maven/fray-plugins-maven)](https://central.sonatype.com/artifact/org.pastalab.fray.maven/fray-plugins-maven)

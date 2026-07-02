@@ -313,8 +313,11 @@ public sealed class RunContext
             return signalContext;
         });
 
-    public void MonitorEnter(object lockObject, bool shouldRetry = false) =>
-        LockImpl(GetLockContext(lockObject), lockObject, shouldBlock: true, canInterrupt: false,
+    // Unlike Java's synchronized, .NET's Monitor.Enter (and thus the C# lock
+    // statement) responds to Thread.Interrupt; callers modeling .NET monitors
+    // pass canInterrupt: true.
+    public void MonitorEnter(object lockObject, bool shouldRetry = false, bool canInterrupt = false) =>
+        LockImpl(GetLockContext(lockObject), lockObject, shouldBlock: true, canInterrupt: canInterrupt,
             blockedUntil: BlockedOperation.NotTimed, shouldRetry: shouldRetry);
 
     public void MonitorExit(object lockObject)

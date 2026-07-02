@@ -5,8 +5,11 @@ namespace Fray.Tests;
 
 public class DeadlockTests
 {
-    [Fact]
-    public void FindsLockOrderInversionDeadlock()
+    [Theory]
+    [InlineData(SchedulerKind.Random)]
+    [InlineData(SchedulerKind.Pct)]
+    [InlineData(SchedulerKind.Pos)]
+    public void FindsLockOrderInversionDeadlock(SchedulerKind scheduler)
     {
         var result = FrayTestRunner.Run(() =>
         {
@@ -41,7 +44,7 @@ public class DeadlockTests
             });
             t1.Join();
             t2.Join();
-        }, new FrayConfiguration { Iterations = 1000, Seed = 3 });
+        }, new FrayConfiguration { Iterations = 1000, Seed = 3, Scheduler = scheduler });
 
         Assert.NotNull(result.BugFound);
         Assert.IsType<DeadlockException>(result.BugFound);

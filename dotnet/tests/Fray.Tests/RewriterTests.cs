@@ -379,6 +379,33 @@ public class RewriterTests : IClassFixture<RewrittenAssemblyFixture>
     }
 
     [Fact]
+    public void ExceptionUnwindingThroughPlainLockReleasesIt()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.HardeningTargets", "ExceptionInsideLockReleasesIt"),
+            new FrayConfiguration { Iterations = 200, Seed = 7 });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
+    public void InterruptWakesPlainLockStatement()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.HardeningTargets", "InterruptWakesLockStatement"),
+            new FrayConfiguration { Iterations = 200, Seed = 11 });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
+    public void PlainTimedJoinTimesOutDeterministically()
+    {
+        var result = FrayTestRunner.Run(Target("Fray.TargetCode.HardeningTargets", "TimedJoinTimesOutThenSucceeds"),
+            new FrayConfiguration { Iterations = 100, Seed = 13, AllowSpuriousWakeups = false });
+
+        Assert.True(result.BugFound == null, result.ErrorReport);
+    }
+
+    [Fact]
     public void RewrittenLostUpdateReplaysToTheSameBug()
     {
         var reportDirectory = Path.Combine(Path.GetTempPath(), $"fray-report-{Guid.NewGuid():N}");

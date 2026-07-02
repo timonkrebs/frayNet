@@ -40,7 +40,7 @@ internal static class ControlledThreadLifecycle
     /// <summary>Waits on the handle's monitor until <paramref name="completed"/>; Java's join.</summary>
     internal static bool Join(RunContext runContext, object joinHandle, Func<bool> completed, long blockedUntil)
     {
-        runContext.MonitorEnter(joinHandle);
+        runContext.MonitorEnter(joinHandle, canInterrupt: true);
         try
         {
             while (!completed())

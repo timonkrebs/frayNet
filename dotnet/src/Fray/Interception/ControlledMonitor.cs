@@ -18,7 +18,7 @@ public static class ControlledMonitor
             Monitor.Enter(obj);
             return;
         }
-        runContext.MonitorEnter(obj);
+        runContext.MonitorEnter(obj, canInterrupt: true);
     }
 
     public static void Enter(object obj, ref bool lockTaken)
@@ -29,7 +29,7 @@ public static class ControlledMonitor
             Monitor.Enter(obj, ref lockTaken);
             return;
         }
-        runContext.MonitorEnter(obj);
+        runContext.MonitorEnter(obj, canInterrupt: true);
         // Only set after the model acquisition succeeded, so the caller's
         // finally block skips Exit when the acquisition was aborted.
         lockTaken = true;

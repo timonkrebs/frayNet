@@ -50,11 +50,15 @@ public class ReplayTests
         }
     }
 
-    [Fact]
-    public void SeededExplorationIsDeterministic()
+    [Theory]
+    [InlineData(SchedulerKind.Random)]
+    [InlineData(SchedulerKind.Pct)]
+    [InlineData(SchedulerKind.Pos)]
+    [InlineData(SchedulerKind.Surw)]
+    public void SeededExplorationIsDeterministic(SchedulerKind scheduler)
     {
-        var config1 = new FrayConfiguration { Iterations = 500, Seed = 99 };
-        var config2 = new FrayConfiguration { Iterations = 500, Seed = 99 };
+        var config1 = new FrayConfiguration { Iterations = 500, Seed = 99, Scheduler = scheduler };
+        var config2 = new FrayConfiguration { Iterations = 500, Seed = 99, Scheduler = scheduler };
 
         var first = FrayTestRunner.Run(LostUpdateBody, config1);
         var second = FrayTestRunner.Run(LostUpdateBody, config2);
@@ -67,6 +71,91 @@ public class ReplayTests
         Assert.Equal(
             first.FailingSchedule!.Select(r => (r.Scheduled, r.Operation)),
             second.FailingSchedule!.Select(r => (r.Scheduled, r.Operation)));
+    }
+
+    [Fact]
+    public void DeadlockReplaysToDeadlock()
+    {
+        var reportDirectory = Path.Combine(Path.GetTempPath(), $"fray-report-{Guid.NewGuid():N}");
+        try
+        {
+            static void DeadlockBody()
+            {
+                var lockA = new FrayLock();
+                var lockB = new FrayLock();
+                var t1 = FrayThread.StartNew(() =>
+                {
+                    lockA.Lock();
+                    lockB.Lock();
+                    lockB.Unlock();
+                    lockA.Unlock();
+                });
+                var t2 = FrayThread.StartNew(() =>
+                {
+                    lockB.Lock();
+                    lockA.Lock();
+                    lockA.Unlock();
+                    lockB.Unlock();
+                });
+                t1.Join();
+                t2.Join();
+            }
+
+            var exploration = FrayTestRunner.Run(DeadlockBody, new FrayConfiguration
+            {
+                Iterations = 1000,
+                Seed = 3,
+                ReportDirectory = reportDirectory,
+            });
+            Assert.IsType<Fray.Core.DeadlockException>(exploration.BugFound);
+            Assert.NotNull(exploration.ReportPath);
+
+            var replay = FrayTestRunner.Run(DeadlockBody, FrayConfiguration.Replay(exploration.ReportPath!));
+
+            Assert.IsType<Fray.Core.DeadlockException>(replay.BugFound);
+            Assert.Equal(1, replay.Iterations);
+            Assert.True(replay.ReplayDivergence == null, replay.ReplayDivergence);
+        }
+        finally
+        {
+            if (Directory.Exists(reportDirectory))
+            {
+                Directory.Delete(reportDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ReplayingADifferentBodyIsDetected()
+    {
+        var reportDirectory = Path.Combine(Path.GetTempPath(), $"fray-report-{Guid.NewGuid():N}");
+        try
+        {
+            var exploration = FrayTestRunner.Run(LostUpdateBody, new FrayConfiguration
+            {
+                Iterations = 500,
+                Seed = 1234,
+                ReportDirectory = reportDirectory,
+            });
+            Assert.NotNull(exploration.ReportPath);
+
+            // Replay against a body with a different thread structure.
+            var replay = FrayTestRunner.Run(() =>
+            {
+                var t = FrayThread.StartNew(() => { });
+                t.Join();
+            }, FrayConfiguration.Replay(exploration.ReportPath!));
+
+            Assert.True(replay.ReplayDivergence != null || replay.BugFound != null,
+                "Replaying a mismatched body must surface a divergence.");
+        }
+        finally
+        {
+            if (Directory.Exists(reportDirectory))
+            {
+                Directory.Delete(reportDirectory, recursive: true);
+            }
+        }
     }
 
     [Fact]

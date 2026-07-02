@@ -204,7 +204,12 @@ racing operations are identified by their call sites, and
 event/pair states the exploration reached — useful for judging whether more
 iterations still find new behavior.
 
-The suite (66 tests, ~3s) checks both directions: seeded explorations *find*
+One deliberate semantic difference from the JVM implementation: monitor
+acquisition (`Monitor.Enter`, the C# `lock` statement, `FrayMonitor.Enter`)
+is modeled as *interruptible*, because .NET's `Monitor.Enter` responds to
+`Thread.Interrupt` — unlike Java's `synchronized`.
+
+The suite (99 tests, ~4s) checks both directions: seeded explorations *find*
 known bugs (lost updates, ABBA deadlocks, lost wakeups, `if`-instead-of-
 `while` wait conditions, over-wide semaphores, check-then-act CAS races —
 in wrapper-based and in rewritten plain code) and correct implementations
